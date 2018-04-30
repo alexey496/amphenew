@@ -1,0 +1,10 @@
+name = Commerce one page checkout.
+description = Ajax обновляемые корзина и поля адреса. Настройки смотри в файлах модуля
+core = 7.x
+package = Custom
+
+dependencies[] = commerce_checkout
+dependencies[] = commerce_shipping
+dependencies[] = addressfield
+dependencies[] = addressfield_phone
+dependencies[] = jquery_update

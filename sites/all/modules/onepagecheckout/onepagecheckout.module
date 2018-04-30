@@ -1,0 +1,297 @@
+<?php
+
+/**
+ * Модуль позволяет скрыть / сделать необязательными / указать значения по умолчанию / отключить возможность редактирования
+ * поля адреса модуля addressfield в зависимости от выбранного способа доставки на основе AJAX.
+ * Также на основе AJAX в корзину добавляется выбранный способ доставки и рассчитывается общая стоимость заказа -
+ * это позволяет отказаться от страницы проверки заказа.
+ * Таким образом модуль позволяет установить все панели необходимые для оформления заказа на страницу оформления заказа
+ * Также несколько дополнительных функций, как то:
+ * - Добавляет комментарии к полям адреса, по умолчанию установлен комментарий к полю "Компания"
+ * - Делает поля обязательными для заполнения, по умолчанию поле ТЕЛЕФОН сделано обязательным
+ * - Включает возможность перевода названия панелей Billing information и Shipping information
+ * - Включает маску для ввода телефонного номера
+ */
+
+/**
+ * Implements hook_form_FORM_ID_alter()
+ */
+function onepagecheckout_form_commerce_checkout_form_checkout_alter(&$form, &$form_state, $form_id) {
+/**
+ * Укажите настройки видимости / значений по умолчанию / возможность редактирования полей адреса пользователями,
+ * в зависимости от выбранного способа доставки, в массиве
+ *
+ * Массив настроек имеет следующую структуру: $addressfield_access['МАШИННОЕ_ИМЯ_СПОСОБА_ДОСТАВКИ']...
+ * Нужно указать правльное машинное имя способа доставки и далее комментировать / раскомментировать нужные строчки
+ *
+ * Внимание!!! нет проверки на существование поля, по этому нужно заполнять массив крайне внимательно и не допускать ошибок
+ */
+
+$addressfield_access= array();
+/*********** Самовывоз ***********/
+//$addressfield_access['a_pickup']['locality_block']['locality']['#access'] = FALSE;                    // Город не видимый
+$addressfield_access['a_pickup']['#address']['locality'] = 'Санкт-Петербург';                         // Город по умолчанию
+$addressfield_access['a_pickup']['locality_block']['locality']['#disabled'] = TRUE;                   // Город не редактируемый
+//$addressfield_access['a_pickup']['locality_block']['administrative_area']['#access'] = FALSE;         // Область не видимый
+$addressfield_access['a_pickup']['#address']['administrative_area'] = 'SPE';                          // Область по умолчанию
+$addressfield_access['a_pickup']['locality_block']['administrative_area']['#disabled'] = TRUE;        // Область не редактируемый
+//$addressfield_access['a_pickup']['locality_block']['postal_code']['#access'] = FALSE;                 // Индекс не видимый
+$addressfield_access['a_pickup']['#address']['postal_code'] = '195027';                               // Индекс по умолчанию
+$addressfield_access['a_pickup']['locality_block']['postal_code']['#disabled'] = TRUE;                // Индекс не редактируемый
+//$addressfield_access['a_pickup']['street_block']['thoroughfare']['#access'] = FALSE;                  // Адрес не видимый
+$addressfield_access['a_pickup']['#address']['thoroughfare'] = 'ул. Якорная, д.6';                    // Адрес по умолчанию
+$addressfield_access['a_pickup']['street_block']['thoroughfare']['#disabled'] = TRUE;                 // Адрес не редактируемый
+$addressfield_access['a_pickup']['name_block']['first_name']['#required'] = FALSE;                    // Имя не обязательный
+$addressfield_access['a_pickup']['name_block']['last_name']['#required'] = FALSE;                     // Фамилия не обязательный
+$addressfield_access['a_pickup']['phone_block']['phone_number']['phone_number']['#required'] = FALSE; // Телефон не обязательный
+
+/*********** Доставка по городу ***********/
+//$addressfield_access['courier_spb']['locality_block']['locality']['#access'] = FALSE;                   // Город не видимый
+$addressfield_access['courier_spb']['#address']['locality'] = 'Санкт-Петербург';                        // Город по умолчанию
+$addressfield_access['courier_spb']['locality_block']['locality']['#disabled'] = TRUE;                  // Город не редактируемый
+//$addressfield_access['courier_spb']['locality_block']['administrative_area']['#access'] = FALSE;        // Область не видимый
+$addressfield_access['courier_spb']['#address']['administrative_area'] = 'SPE';                         // Область по умолчанию
+$addressfield_access['courier_spb']['locality_block']['administrative_area']['#disabled'] = TRUE;       // Область не редактируемый
+$addressfield_access['courier_spb']['locality_block']['postal_code']['#access'] = FALSE;                // Индекс не видимый
+//$addressfield_access['courier_spb']['#address']['postal_code'] = '195027';                              // Индекс по умолчанию
+//$addressfield_access['courier_spb']['locality_block']['postal_code']['#disabled'] = TRUE;               // Индекс не редактируемый
+//$addressfield_access['courier_spb']['street_block']['thoroughfare']['#access'] = FALSE;                 // Адрес не видимый
+//$addressfield_access['courier_spb']['#address']['thoroughfare'] = 'ул. Якорная, д.6';                   // Адрес по умолчанию
+//$addressfield_access['courier_spb']['street_block']['thoroughfare']['#disabled'] = TRUE;                // Адрес не редактируемый
+//$addressfield_access['courier_spb']['name_block']['first_name']['#required'] = FALSE;                   // Имя не обязательный
+//$addressfield_access['courier_spb']['name_block']['last_name']['#required'] = FALSE;                    // Фамилия не обязательный
+//$addressfield_access['courier_spb']['phone_block']['phone_number']['phone_number']['#required'] = FALSE;// Телефон не обязательный
+
+
+  if (isset($form['cart_contents']['cart_contents_view'])) {
+
+    // Создадим свою обертку для полей корзины для обновления AJAX
+    $form['cart_contents']['#prefix'] = '<div id="onepagecheckout-cart-ajax-wrapper">';
+    $form['cart_contents']['#suffix'] = '</div>';
+
+    // Создадим свой класс для полей Информации о плательщике для обновления AJAX
+    if (isset($form['customer_profile_billing'])) {
+      $form['customer_profile_billing']['commerce_customer_address']['und'][0]['#prefix'] = '<div id="addressfield-wrapper" class ="ajax-customer-profile-billing">';
+      $form['customer_profile_billing']['commerce_customer_address']['und'][0]['#suffix'] = '</div>';
+    }
+
+    // Создадим свой класс для полей Информации о грузополучателе для обновления AJAX
+    if (isset($form['customer_profile_shipping'])) {
+      $form['customer_profile_shipping']['commerce_customer_address']['und'][0]['#prefix'] = '<div id="addressfield-wrapper" class ="ajax-customer-profile-shipping">';
+      $form['customer_profile_shipping']['commerce_customer_address']['und'][0]['#suffix'] = '</div>';
+    }
+
+
+    // Определим AJAX функцию обратного вызова при изменении способа доставки
+    if (isset($form['commerce_shipping']['shipping_service'])) {
+      $form['commerce_shipping']['shipping_service']['#ajax'] = array(
+        'callback' => '_onepagecheckout_shipping_service_has_changed',
+        'effect' => 'fade',
+      );
+    }
+  }
+
+  // если не создано ни одного способа доставки, запретим выполнение функции
+  if(empty(commerce_shipping_services())) {
+    return;
+  }
+
+  $form_state['addressfield'] = array(); // если не создать массив, будут плодится ошибки в журнале при каждом оформлении заказа
+
+  // Если способ доставки выбран, то получим его
+  if(isset($form_state['input']['commerce_shipping']['shipping_service'])) {
+    $current_shipping_service = $form_state['input']['commerce_shipping']['shipping_service'];
+  }  else {
+  // Иначе, выбирем первый в списке способ доставки (именно он выбирается по умолчанию)
+    $current_shipping_service = current(commerce_shipping_services($method = NULL))['name']; //либо можно прописать строкой id способа доставки, либо можно пустую строку '' - не понятно, что правильнее
+  }
+
+
+
+
+
+  // Вносим изменения в виджет: отключаем ненужные поля или делаем их необязательными
+  foreach ($addressfield_access as $shipping_service => $array) {
+    if ($current_shipping_service == $shipping_service) {
+      if (isset($form['customer_profile_billing']['commerce_customer_address'])) {
+        $form['customer_profile_billing']['commerce_customer_address']['und'][0] = array_replace_recursive($form['customer_profile_billing']['commerce_customer_address']['und'][0], $array);
+      }
+      if (isset($form['customer_profile_shipping']['commerce_customer_address'])) {
+        $form['customer_profile_shipping']['commerce_customer_address']['und'][0] = array_replace_recursive($form['customer_profile_shipping']['commerce_customer_address']['und'][0], $array);
+      }
+    }
+  }
+}
+
+
+/**
+ * Implements hook_commerce_customer_profile_copy_refresh_alter()
+ *
+ * @param array &$commands
+ * @param array $form
+ * @param array $form_state
+ */
+function onepagecheckout_commerce_customer_profile_copy_refresh_alter(&$commands, $form, $form_state) {
+  // Update the cart, when the shipping address has changed.
+  $commands += _onepagecheckout_ajax_cart_refresh_commands($form, $form_state);
+}
+
+/**
+ * Update the cart and the service details, when a different shipping method is
+ * selected.
+ *
+ * @param array $form
+ * @param array $form_state
+ * @return array
+ */
+function _onepagecheckout_shipping_service_has_changed($form, $form_state) {
+  $commands = _onepagecheckout_ajax_cart_refresh_commands($form, $form_state);
+  $commands[] = ajax_command_replace(
+    '#commerce-shipping-service-details',
+    drupal_render($form['commerce_shipping']['service_details'])
+  );
+  return array(
+    '#type' => 'ajax',
+    '#commands' => $commands,
+  );
+}
+
+/**
+ * @param array $form
+ * @param array $form_state
+ * @return array
+ */
+function _onepagecheckout_ajax_cart_refresh_commands(&$form, $form_state) {
+
+  if (!isset($form['cart_contents']['cart_contents_view'])) {
+    return array();
+  }
+
+  // Create the shipping line item.
+  _onepagecheckout_add_shipping_line_item($form, $form_state);
+
+  // Extract the View and display keys from the cart contents pane setting.
+  list($view_id, $display_id) = explode('|', variable_get('commerce_cart_contents_pane_view', 'commerce_cart_summary|default'));
+
+  $arguments = array($form_state['order']->order_id);
+  $form['cart_contents']['cart_contents_view']['#markup'] = commerce_embed_view($view_id, $display_id, $arguments);
+
+  $commands[] = ajax_command_replace(
+    '#onepagecheckout-cart-ajax-wrapper',
+    drupal_render($form['cart_contents'])
+  );
+
+  $commands[] = ajax_command_replace(
+    '.ajax-customer-profile-billing',
+    trim(drupal_render($form['customer_profile_billing']['commerce_customer_address']['und'][0]))
+  );
+
+  $commands[] = ajax_command_replace(
+    '.ajax-customer-profile-shipping',
+    trim(drupal_render($form['customer_profile_shipping']['commerce_customer_address']['und'][0]))
+  );
+
+
+  return $commands;
+}
+
+/**
+ * Copied from commerce_shipping_pane_checkout_form_submit()
+ *
+ * @param array $form
+ * @param array $form_state
+ */
+
+function _onepagecheckout_add_shipping_line_item($form, $form_state) {
+
+  $pane_id = 'commerce_shipping';
+  $order = $form_state['order'];
+
+  // Only attempt validation if we actually had payment methods on the form.
+  if (empty($form[$pane_id]) || empty($form_state['values'][$pane_id])) {
+    return;
+  }
+
+  $pane_form = $form[$pane_id];
+  $pane_values = $form_state['values'][$pane_id];
+
+  // Initialize the extra details if necessary.
+  if (empty($pane_values['service_details'])) {
+    $pane_values['service_details'] = array();
+  }
+
+  // Only submit if there were shipping services available.
+  if (empty($pane_values['shipping_rates']) || empty($pane_values['shipping_service'])) {
+    return;
+  }
+
+  $shipping_service = commerce_shipping_service_load($pane_values['shipping_service']);
+
+  // добавлено
+  $order = commerce_order_load($order->order_number);
+
+  // Delete any existing shipping line items from the order.
+  commerce_shipping_delete_shipping_line_items($order, TRUE);
+
+  // Extract the unit price from the calculated rate.
+  $rate_line_item = $pane_values['shipping_rates'][$pane_values['shipping_service']];
+  $rate_line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $rate_line_item);
+  $unit_price = $rate_line_item_wrapper->commerce_unit_price->value();
+
+  // Create a new shipping line item with the calculated rate from the form.
+  $line_item = commerce_shipping_line_item_new($pane_values['shipping_service'], $unit_price, $order->order_id, $rate_line_item->data, $rate_line_item->type);
+
+  // Add the service details to the line item's data array and the order.
+  $line_item->data['service_details'] = $pane_values['service_details'];
+
+  // Allow the details form submit handler to make any necessary updates to
+  // the line item before adding it to the order.
+
+  if ($callback = commerce_shipping_service_callback($shipping_service, 'details_form_submit')) {
+    $callback($pane_form['service_details'], $pane_values['service_details'], $line_item);
+  }
+
+  // Save and add the line item to the order.
+  $success = commerce_shipping_add_shipping_line_item($line_item, $order, TRUE);
+  if ($success) {
+    commerce_order_save($order);
+  }
+}
+
+
+ /*
+ * Изменим некоторые параметры полей Addressfield
+ */
+function onepagecheckout_field_widget_addressfield_standard_form_alter(&$element, &$form_state, $context) {
+  // Добавим комментарий к полю "Компания"
+  if (!empty($element['organisation_block']['organisation_name'])) {
+    $element['organisation_block']['organisation_name']['#description'] = 'Укажите название компании или ИНН, если необходимо оформить покупку на юр. лицо.';
+  }
+
+  // сделаем поле ТЕЛЕФОН обязательным для заполнения
+  if (!empty($element['phone_block']['phone_number'])) {
+    $element['phone_block']['phone_number']['phone_number']['#required'] = TRUE;
+  }
+}
+
+
+ /*
+ * Включаем возможность перевода названия панелей Billing information и Shipping information
+ */
+function onepagecheckout_commerce_checkout_pane_info_alter(&$panes) {
+  if (isset($panes['customer_profile_billing']['title'])) {
+    $panes['customer_profile_billing']['title'] = t($panes['customer_profile_billing']['title']);
+  }
+  if (isset($panes['customer_profile_shipping']['title'])) {
+    $panes['customer_profile_shipping']['title'] = t($panes['customer_profile_shipping']['title']);
+  }
+}
+
+
+ /*
+ * Подключим JS файлы для задания маски при вводе телефонного номера. Настройки маски смотри в файле /js/onepagecheckout.js
+ */
+function onepagecheckout_init() {
+  drupal_add_js(drupal_get_path('module', 'onepagecheckout') .'/js/onepagecheckout.js');
+  drupal_add_js(drupal_get_path('module', 'onepagecheckout') .'/js/jquery.maskedinput.min.js');
+}
